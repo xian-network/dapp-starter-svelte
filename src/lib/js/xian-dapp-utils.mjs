@@ -22,6 +22,7 @@ const XianWalletUtils = {
 
         document.addEventListener('xianWalletInfo', event => {
             if (this.walletInfoResolver) {
+                // @ts-ignore
                 this.walletInfoResolver(event.detail);
                 this.walletInfoResolver = null; // Reset the resolver after use
             }
@@ -29,11 +30,14 @@ const XianWalletUtils = {
 
         document.addEventListener('xianWalletTxStatus', event => {
             if (this.transactionResolver) {
+                // @ts-ignore
                 if ('errors' in event.detail) {
+                    // @ts-ignore
                     this.transactionResolver(event.detail);
                     this.transactionResolver = null; // Reset the resolver after use
                     return;
                 }
+                // @ts-ignore
                 this.getTxResultsAsyncBackoff(event.detail.txid).then(tx => {
                     let data = tx.result.tx_result.data;
                     let original_tx = tx.result.tx

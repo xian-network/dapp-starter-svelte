@@ -5,7 +5,7 @@
     import { updateCurrentCounter } from "./lib/js/node";
     import { xianWalletUtilInstance } from "./lib/store";
     // @ts-ignore
-    import XianWalletUtils from "./xian-dapp-utils";
+    import XianWalletUtils from "./lib/js/xian-dapp-utils.mjs";
     import Nav from "./lib/svelte-components/Nav.svelte";
     import Section from "./lib/svelte-components/Section.svelte";
 
