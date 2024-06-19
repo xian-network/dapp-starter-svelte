@@ -1,4 +1,4 @@
-Please don't use the dapp.js included here but the newest one from the dapp-utils repository.
+Please don't use the `xian-dapp-utils.mjs` included here but the newest one from the dapp-utils repository.
 
 # Xian Counter dApp
 
