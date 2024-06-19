@@ -12,7 +12,7 @@ This is a simple decentralized application (dApp) that interacts with the Xian b
 
 ## Setup
 
-1. Install the Xian Wallet browser extension.
+1. Install the Xian Wallet [browser extension](https://chromewebstore.google.com/search/xian%20wallet).
 2. Clone this repository.
 3. `npm install`
 4. `npm run dev`
