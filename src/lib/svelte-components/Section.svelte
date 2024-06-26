@@ -15,7 +15,7 @@
             Decentralized Counter
         </h1>
         <p class="subtitle">
-            Everyone can increment the counter by calling the smart contract function increment_counter().
+            Everyone can increment the counter by calling the smart contract function <span class="inline-highlite">increment_counter()</span>.
         </p>
         <div class="counter-container">
             <div class="counter">
