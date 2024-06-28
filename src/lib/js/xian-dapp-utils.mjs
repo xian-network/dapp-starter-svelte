@@ -1,70 +1,85 @@
 const XianWalletUtils = {
     rpcUrl: 'https://testnet.xian.org', // Default RPC URL
     isWalletReady: false,
-    walletReadyResolver: null,
-
-    hexToString: function(hex) {
-        // Convert hex string to bytes
-        let bytes = [];
-        for (let i = 0; i < hex.length; i += 2) {
-            bytes.push(parseInt(hex.substr(i, 2), 16));
-        }
-
-        // Convert bytes to string
-        return String.fromCharCode.apply(String, bytes);
+    initialized: false,
+    state: {
+        walletReady: {
+            isReady: false,
+            resolvers: [],
+        },
+        walletInfo: {
+            requests: [],
+        },
+        signMessage: {
+            requests: [],
+        },
+        transaction: {
+            requests: [],
+        },
     },
 
     // Initialize listeners to resolve promises and set RPC URL
     init: function(rpcUrl) {
+        if (this.initialized) {
+            console.warn('XianWalletUtils is already initialized. Avoiding re-initialization.');
+            return;
+        }
+        
         if (rpcUrl) {
             this.rpcUrl = rpcUrl;
         }
 
+        // Event listeners for wallet events
         document.addEventListener('xianWalletInfo', event => {
-            if (this.walletInfoResolver) {
-                this.walletInfoResolver(event.detail);
-                this.walletInfoResolver = null; // Reset the resolver after use
+            // Resolve pending wallet info requests
+            if (this.state.walletInfo.requests.length > 0) {
+                const resolver = this.state.walletInfo.requests.shift();
+                resolver(event.detail);
             }
         });
 
         document.addEventListener('xianWalletSignMsgResponse', event => {
-            if (this.signMsgResolver) {
-                this.signMsgResolver(event.detail);
-                this.signMsgResolver = null; // Reset the resolver after use
+            // Resolve pending sign message requests
+            if (this.state.signMessage.requests.length > 0) {
+                const resolver = this.state.signMessage.requests.shift();
+                resolver(event.detail);
             }
         });
 
         document.addEventListener('xianWalletTxStatus', event => {
-            if (this.transactionResolver) {
+            // Resolve pending transaction status requests
+            if (this.state.transaction.requests.length > 0) {
+                const resolver = this.state.transaction.requests.shift();
                 if ('errors' in event.detail) {
-                    this.transactionResolver(event.detail);
-                    this.transactionResolver = null; // Reset the resolver after use
-                    return;
+                    resolver(event.detail);
+                } else {
+                    this.getTxResultsAsyncBackoff(event.detail.txid).then(tx => {
+                        let data = tx.result.tx_result.data;
+                        let original_tx = tx.result.tx;
+                        let decodedData = window.atob(data);
+                        let decodedOriginalTx = window.atob(original_tx);
+                        let parsedData = JSON.parse(decodedData);
+                        parsedData.original_tx = JSON.parse(this.hexToString(decodedOriginalTx));
+                        resolver(parsedData);
+                    }).catch(error => {
+                        console.error('Final error after retries:', error);
+                        resolver(null);
+                    });
                 }
-                this.getTxResultsAsyncBackoff(event.detail.txid).then(tx => {
-                    let data = tx.result.tx_result.data;
-                    let original_tx = tx.result.tx
-                    let decodedData = window.atob(data);
-                    let decodedOriginalTx = window.atob(original_tx);
-                    let parsedData = JSON.parse(decodedData);
-                    parsedData.original_tx = JSON.parse(this.hexToString(decodedOriginalTx));
-                    this.transactionResolver(parsedData);
-                    this.transactionResolver = null; // Reset the resolver after use
-                }).catch(error => {
-                    console.error('Final error after retries:', error);
-                    this.transactionResolver(null);
-                });
             }
         });
 
         document.addEventListener('xianReady', () => {
             this.isWalletReady = true;
-            if (this.walletReadyResolver) {
-                this.walletReadyResolver();
-                this.walletReadyResolver = null; // Reset the resolver after use
+            // Resolve all pending wallet ready requests
+            while (this.state.walletReady.resolvers.length > 0) {
+                const resolver = this.state.walletReady.resolvers.shift();
+                resolver();
             }
             console.log('Xian Wallet is ready');
         });
+
+        this.initialized = true; // Mark as initialized
     },
 
     waitForWalletReady: function() {
@@ -72,50 +87,48 @@ const XianWalletUtils = {
             if (this.isWalletReady) {
                 resolve();
             } else {
-                this.walletReadyResolver = resolve;
+                this.state.walletReady.resolvers.push(resolve);
                 setTimeout(() => {
                     if (!this.isWalletReady) {
-                        this.walletReadyResolver = null; // Clear the resolver
-                        resolve(); // Resolve anyway to not block the flow
+                        const index = this.state.walletReady.resolvers.indexOf(resolve);
+                        if (index !== -1) {
+                            this.state.walletReady.resolvers.splice(index, 1);
+                            resolve(); // Resolve anyway to not block the flow
+                        }
                     }
                 }, 2000); // 2 seconds timeout
             }
         });
     },
 
-    // Request wallet information and return a promise that resolves with the info
     requestWalletInfo: async function() {
         await this.waitForWalletReady();
         return new Promise((resolve, reject) => {
-            this.walletInfoResolver = resolve; // Store the resolver to use in the event listener
+            this.state.walletInfo.requests.push(resolve);
 
-            // Set a timeout to reject the promise if it does not resolve within a certain timeframe
             const timeoutId = setTimeout(() => {
-                this.walletInfoResolver = null; // Clear the resolver
-                reject(new Error('Xian Wallet Chrome extension not installed or not responding'));
+                const index = this.state.walletInfo.requests.indexOf(resolve);
+                if (index !== -1) {
+                    this.state.walletInfo.requests.splice(index, 1);
+                    reject(new Error('Xian Wallet Chrome extension not installed or not responding'));
+                }
             }, 2000); // 2 seconds timeout
 
-            // Dispatch the event to request wallet info
             document.dispatchEvent(new CustomEvent('xianWalletGetInfo'));
-
-            // Wrap the original resolve to clear the timeout when resolved
-            this.walletInfoResolver = (info) => {
-                clearTimeout(timeoutId);
-                resolve(info);
-            };
         });
     },
 
-    // Sign a message and return a promise that resolves with the signature
     signMessage: async function(message) {
         await this.waitForWalletReady();
         return new Promise((resolve, reject) => {
-            this.signMsgResolver = resolve; // Store the resolver to use in the event listener
+            this.state.signMessage.requests.push(resolve);
 
-            // Set a timeout to reject the promise if it does not resolve within a certain timeframe
             const timeoutId = setTimeout(() => {
-                this.signMsgResolver = null; // Clear the resolver
-                reject(new Error('Xian Wallet Chrome extension not responding'));
+                const index = this.state.signMessage.requests.indexOf(resolve);
+                if (index !== -1) {
+                    this.state.signMessage.requests.splice(index, 1);
+                    reject(new Error('Xian Wallet Chrome extension not responding'));
+                }
             }, 30000); // 30 seconds timeout, this requires manual confirmation
             
             document.dispatchEvent(new CustomEvent('xianWalletSignMsg', {
@@ -123,20 +136,22 @@ const XianWalletUtils = {
                     message: message
                 }
             }));
-
-            // Wrap the original resolve to clear the timeout when resolved
-            this.signMsgResolver = (signature) => {
-                clearTimeout(timeoutId);
-                resolve(signature);
-            };
         });
     },
 
-    // Send a transaction with detailed parameters and return a promise that resolves with the transaction status
     sendTransaction: async function(contract, method, kwargs) {
         await this.waitForWalletReady();
         return new Promise((resolve, reject) => {
-            this.transactionResolver = resolve; // Store the resolver to use in the event listener
+            this.state.transaction.requests.push(resolve);
+
+            const timeoutId = setTimeout(() => {
+                const index = this.state.transaction.requests.indexOf(resolve);
+                if (index !== -1) {
+                    this.state.transaction.requests.splice(index, 1);
+                    reject(new Error('Xian Wallet Chrome extension not responding'));
+                }
+            }, 30000); // 30 seconds timeout, this requires manual confirmation
+
             document.dispatchEvent(new CustomEvent('xianWalletSendTx', {
                 detail: {
                     contract: contract,
@@ -144,18 +159,6 @@ const XianWalletUtils = {
                     kwargs: kwargs
                 }
             }));
-
-            // Set a timeout to reject the promise if it does not resolve within a certain timeframe
-            const timeoutId = setTimeout(() => {
-                this.transactionResolver = null; // Clear the resolver
-                reject(new Error('Xian Wallet Chrome extension not responding'));
-            }, 30000); // 30 seconds timeout, this requires manual confirmation
-
-            // Wrap the original resolve to clear the timeout when resolved
-            this.transactionResolver = (txStatus) => {
-                clearTimeout(timeoutId);
-                resolve(txStatus);
-            };
         });
     },
 
@@ -225,6 +228,14 @@ const XianWalletUtils = {
             await new Promise(resolve => setTimeout(resolve, delay));
             return await this.getTxResultsAsyncBackoff(txHash, retries - 1, delay * 2);
         }
-    }
+    },
+
+    hexToString: function(hex) {
+        let bytes = [];
+        for (let i = 0; i < hex.length; i += 2) {
+            bytes.push(parseInt(hex.substr(i, 2), 16));
+        }
+        return String.fromCharCode.apply(String, bytes);
+    },
 };
 export default XianWalletUtils;
