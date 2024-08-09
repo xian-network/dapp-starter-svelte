@@ -1,9 +1,13 @@
 <script>
-    import { counterValue, xianWalletUtilInstance } from "../store";
+    import { getContext } from 'svelte';
+    
+    import { counterValue } from "../store";
     import { handleTransaction, handleTransactionError } from "../js/main";
+
+    const { xdu } = getContext('app_functions');
     
     const sendTransaction = async() => {
-        const response = await $xianWalletUtilInstance.sendTransaction("con_counter", "increment_counter", {}).catch(handleTransactionError)
+        const response = await xdu().sendTransaction("con_counter", "increment_counter", {}).catch(handleTransactionError)
         handleTransaction(response)
     };
     

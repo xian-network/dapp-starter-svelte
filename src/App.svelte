@@ -1,13 +1,14 @@
 <script>
     import "bulma/css/bulma.min.css";
-    import { onMount } from "svelte";
+    import { onMount, setContext } from "svelte";
     import { handleWalletError, handleWalletInfo } from "./lib/js/main";
     import { updateCurrentCounter } from "./lib/js/node";
-    import { xianWalletUtilInstance } from "./lib/store";
     // @ts-ignore
     import XianWalletUtils from "./lib/js/xian-dapp-utils";
     import Nav from "./lib/svelte-components/Nav.svelte";
     import Section from "./lib/svelte-components/Section.svelte";
+
+    let xdu;
 
     onMount(async ()=>{
         XianWalletUtils.init('https://testnet.xian.org');
@@ -16,9 +17,15 @@
         handleWalletInfo(info);
 
         await updateCurrentCounter()
-        //store for later use
-        xianWalletUtilInstance.set(XianWalletUtils);
-    });   
+        // store XianWalletUtils instance
+        xdu = XianWalletUtils
+    });  
+
+    setContext('app_functions', {
+        xdu: () => {
+          return xdu
+        }
+    })
 </script>
 
 <main>
